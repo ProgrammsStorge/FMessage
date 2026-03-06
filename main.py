@@ -1,3 +1,6 @@
+#Я закомичу все изменения когда их допишу. 
+
+
 # SETTINGS
 import threading
 
