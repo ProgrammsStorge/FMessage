@@ -47,11 +47,11 @@ def scan_to_users():
 
 def send_handshake(ip):
     try:
-        okay = requests.post(f"{ip}:{messager_port}/ping").json()["ok"]
+        okay = requests.post(f"http://{ip}:{messager_port}/ping", timeout=5).json()["ok"]
         if okay:
             priv_key = RSA.generate(2048)
             pub_key = priv_key.public_key()
-            json_handshake=requests.post(f"{ip}:{messager_port}/handshake",json=session.json()|{"pub_key":pub_key.exportKey()}).json()
+            json_handshake=requests.post(f"http://{ip}:{messager_port}/handshake",json=session.json()|{"pub_key":pub_key.export_key().decode('utf-8')}, timeout=5).json()
             users.append(User(json_handshake["name"],priv_key,pub_key,ip))
             print(f"Hello, {json_handshake['name']}!")
 
@@ -63,17 +63,17 @@ def send_message(text,user):
     ciphertext = cipher_rsa.encrypt(text).hex()
 
 
-@app.route("/ping")
+@app.route("/ping", methods=["GET", "POST"])
 def ping():return flask.jsonify({"ok":True,"name":session.name})
 
-@app.route("/handshake")
+@app.route("/handshake", methods=["POST"])
 def handshake():
     json_request=flask.request.json
-    for user in users:
+    for user in users[:]:
         if user.name == json_request["name"] and user.ip == json_request["ip"]:
             users.remove(user)
     users.append(User(json_request["name"],None,RSA.import_key(json_request["pub_key"]),json_request["ip"]))
-    return flask.jsonify({})
+    return flask.jsonify({"name": session.name})
 
 if __name__ == "__main__":
     session = User("test",ip=get_my_ip())
