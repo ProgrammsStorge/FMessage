@@ -1,31 +1,17 @@
-#Я закомичу все изменения когда их допишу. 
-
-
-# SETTINGS
+import logging
+import socket
+import sys
 import threading
-
-from Crypto.Cipher import PKCS1_OAEP
-
-messager_port=55555
-
-# PROGRAM
 import flask
 from flask import Flask
-import socket
-import requests
-from Crypto.PublicKey import RSA
+import client
+from utils import cryptographer,localization
+import ui
+from user import *
+import server
+import flet as ft
 
-class User():
-    def __init__(self, name,priv_key=None, pub_key=None,ip=""):
-        self.ip=ip
-        self.name = name
-        self.pub_key = pub_key
-        self.priv_key = priv_key
 
-    def json(self):
-        return {"name":self.name,"ip":self.ip,}
-
-app = Flask(__name__)
 
 def get_my_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -36,47 +22,78 @@ def get_my_ip():
         s.close()
     return ip
 
-def scan_to_users():
-    ip_range = ".".join(get_my_ip().split(".")[:-1]) + "."
-    for i in range(1, 255):
-        ip = ip_range + str(i)
-        try:
-            threading.Thread(target=send_handshake, args=(ip,),daemon=True).start()
-        except Exception:
-            pass
+def main():
+    app = Flask(__name__)
 
-def send_handshake(ip):
-    try:
-        okay = requests.post(f"{ip}:{messager_port}/ping").json()["ok"]
-        if okay:
-            priv_key = RSA.generate(2048)
-            pub_key = priv_key.public_key()
-            json_handshake=requests.post(f"{ip}:{messager_port}/handshake",json=session.json()|{"pub_key":pub_key.exportKey()}).json()
-            users.append(User(json_handshake["name"],priv_key,pub_key,ip))
-            print(f"Hello, {json_handshake['name']}!")
+    @app.route("/message", methods=['POST'])
+    def get_message_route():
+        data = flask.request.get_json(force=True)
+        return app_server.get_message(flask.request.remote_addr,data)
 
-    except:
-        return False
+    @app.route("/ping", methods=['POST'])
+    def ping_route():
 
-def send_message(text,user):
-    cipher_rsa = PKCS1_OAEP.new(user.pub_key)
-    ciphertext = cipher_rsa.encrypt(text).hex()
+       # print(app_server.ping(flask.request.remote_addr,flask.request.json),flask.request.remote_addr,flask.request.json)
+        return flask.jsonify( app_server.ping(None,None) )
+
+    @app.route("/handshake", methods=['POST'])
+    def handshake_route():
+        data = flask.request.get_json(force=True)
+        return app_server.handshake(flask.request.remote_addr,data)
+
+    def set_talking(user):
+        global talking
+        talking = user
+        render()
+
+    def new_user(user):
+        users_list.append(user)
+        render()
+        print(f"Привет, {user.name}!")
+
+    def get_message(text, user):
+        user.chat_history.append(Message(text,user,"200gray"))
+        if talking==user: render()
+
+    def send_message(sender,target,message):
+        message_sender.send_message(message,target)
+
+    def render():
+        global talking
+        chat_window.render(talking,users_list.get_controls(set_talking))
+
+    loc = localization.Localization("ru")
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    port="55555"
+    print("test", loc.get("login_title"), loc.get("login_enter"), loc.get("input_name_login"))
+    login_ui = ui.LoginUi(loc)
+    #login_ui.input_name="test"
+    ft.app(target=login_ui.guest_login)
+    session = User(login_ui.input_name)
+    chat_window = ui.ChatWindow(session,loc=loc)
+    cryptograph= cryptographer.Cryptographer()
+    users_list = UserList([])
+    message_sender=client.MessageSend(port,get_my_ip(),cryptograph)
+    talking.chat_history.append(Message("Выберите кому хотите отправить сообщение.",talking,"green300"))
+    chat_window.on_send_func=send_message
+    app_server = server.Server(get_my_ip(),port,cryptograph,users_list,session)
+    app_server.on_new_func=new_user
+    app_server.on_get_func=get_message
+    threading.Thread(target=app.run, args=("0.0.0.0", port), daemon=True).start()
+    handshaker=client.Handshaker(port,get_my_ip(),session,users_list,new_user)
+    handshaker.on_new_func=new_user
+    scaner = client.Scaner(port,get_my_ip(),handshaker)
+    scaner.scan()
+    ft.app(target=chat_window.set_page)
 
 
-@app.route("/ping")
-def ping():return flask.jsonify({"ok":True,"name":session.name})
 
-@app.route("/handshake")
-def handshake():
-    json_request=flask.request.json
-    for user in users:
-        if user.name == json_request["name"] and user.ip == json_request["ip"]:
-            users.remove(user)
-    users.append(User(json_request["name"],None,RSA.import_key(json_request["pub_key"]),json_request["ip"]))
-    return flask.jsonify({})
-
-if __name__ == "__main__":
-    session = User("test",ip=get_my_ip())
-    users=[]
-    scan_to_users()
-    app.run("0.0.0.0", port=messager_port)
+if __name__=="__main__":
+    talking = User("placeholder", None, None, get_my_ip())
+    main()
+else:
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(0, u"Ты что творишь?", u"Эй", 16)
+    ctypes.windll.user32.MessageBoxW(0, u"Этот файл надо запускать а не импортировать", u"Эй", 16)
+    sys.exit(999)
