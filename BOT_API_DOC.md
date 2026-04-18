@@ -68,3 +68,9 @@ def handle_message(message: Message):
 if __name__ == "__main__":
     my_bot.start()
 ```
+
+## 4. Работа API
+
+API работает в формате запрос ответ. API не может начать диалог первый. Он только принемает. 
+Client handshake -> Server handshake
+Client message response -> Server send answer -> Client get response
