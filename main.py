@@ -61,6 +61,7 @@ def main():
         return app_server.handshake(flask.request.remote_addr,data)
     def set_talking(user):
         global talking
+        chat_window.attach_files=[]
         talking = user
         render()
     def new_user(user):
@@ -73,7 +74,7 @@ def main():
         for url in extract_domains(text):
             if url in bad_domains:
                 text.replace(url,"[phishing link]")
-                text+=" [phishing]"
+                #text+=" [phishing]"
                 color="red"
         if session.auth:
             if session.messages.get(user.name) == None: session.messages[user.name] = []
